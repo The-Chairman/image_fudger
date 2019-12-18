@@ -73,15 +73,17 @@ def random_lat_long( cur_lat, cur_lat_ref, cur_long, cur_long_ref ):
     
 
 def print_exif_summary( exif_dict ):
-    print( "{:<12}: {}".format( "Orientation",exif_dict['0th'][piexif.ImageIFD.Orientation]) )
-    print( "{:<12}: {}".format( "Latitude", exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef] ) )
-    print( "{:<12}: {}".format( "Latitude", exif_dict['GPS'][piexif.GPSIFD.GPSLatitude] ) )
-    print( "{:<12}: {}".format( "Longitude", exif_dict['GPS'][piexif.GPSIFD.GPSLongitude] ) )
-    print( "{:<12}: {}".format( "Longitude Ref", exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) )
+
+    
+    print( "{:<12}: {}".format( "Orientation",exif_dict['0th'][piexif.ImageIFD.Orientation] if piexif.ImageIFD.Orientation in exif_dict['0th'] else "") )
+    print( "{:<12}: {}".format( "Latitude", exif_dict['GPS'][piexif.GPSIFD.GPSLatitude] if piexif.GPSIFD.GPSLatitude in exif_dict['GPS'] else "" ) )
+    print( "{:<12}: {}".format( "Latitude Ref", exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef] if piexif.GPSIFD.GPSLatitudeRef in exif_dict['GPS'] else "" ) )
+    print( "{:<12}: {}".format( "Longitude", exif_dict['GPS'][piexif.GPSIFD.GPSLongitude] if piexif.GPSIFD.GPSLongitude in exif_dict['GPS'] else "" ) )
+    print( "{:<12}: {}".format( "Longitude Ref", exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] if piexif.GPSIFD.GPSLongitudeRef in exif_dict['GPS'] else "" ) )
     print( "{:<12}: {}".format( "DateTimeOriginal", 
-        exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] ) )
+        exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] if piexif.ExifIFD.DateTimeOriginal in exif_dict['Exif'] else "" ) )
     print( "{:<12}: {}".format( "DateTime", 
-        exif_dict['0th'][piexif.ImageIFD.DateTime] ) )
+        exif_dict['0th'][piexif.ImageIFD.DateTime] if piexif.ImageIFD.DateTime in exif_dict['0th'] else "" ) )
     
 
 def main():
@@ -99,6 +101,10 @@ def main():
         help='randomize the exif GPS location of an image')
     ap.add_argument( '-d', '--datetime', action='store_true',
         help='randomize various exif datetimes of an image')
+    ap.add_argument( '-l', '--line', action='store_true',
+        help='add a random horizonta line to the image' )
+    ap.add_argument( '-r', '--random', action='store_true',
+        help='permute 1% of the pixels in this image' )
     ap.add_argument( '-s', '--summary', action='store_true',
         help='print a summary of the exif data of the source and the manipulated copy')
 
@@ -111,6 +117,7 @@ def main():
         sys.exit(-1) 
 
     with Image.open( args.imagepath ) as source_image:
+        pixels = source_image.load()
         exif_dict = piexif.load( source_image.info['exif'] )
         exif_copy = copy.deepcopy( exif_dict )
         
@@ -120,10 +127,14 @@ def main():
         
         if args.gps:
             print("Altering gps")
-            new_gps = random_lat_long(  exif_dict['GPS'][piexif.GPSIFD.GPSLatitude], 
-                exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef],  
-                exif_dict['GPS'][piexif.GPSIFD.GPSLongitude],  
-                exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) 
+
+            if not exif_dict['GPS']:
+                new_gps = random_lat_long( 0, '', 0,  '') 
+            else:
+                new_gps = random_lat_long(  exif_dict['GPS'][piexif.GPSIFD.GPSLatitude], 
+                    exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef],  
+                    exif_dict['GPS'][piexif.GPSIFD.GPSLongitude],  
+                    exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) 
 
             exif_copy['GPS'][piexif.GPSIFD.GPSLatitude] = new_gps[0][0]
             exif_copy['GPS'][piexif.GPSIFD.GPSLatitudeRef] = new_gps[0][1]
@@ -134,7 +145,27 @@ def main():
             print("Altering datetime") 
             exif_copy['Exif'][piexif.ExifIFD.DateTimeOriginal] = random_datetime()
             exif_copy['0th'][piexif.ImageIFD.DateTime] = random_datetime()
-        
+
+        if args.line:
+            print("Adding a line to the image")
+            seed( datetime.now() )
+            target_row = randint( 0, source_image.size[1] )
+            random_color = ( randint( 0, 250), randint(0, 250), randint(0, 250) )
+            for c in range( source_image.size[0] ):
+                pixels[c, target_row] = random_color
+        if args.random:
+            print( "Altering 1% of the pixels of the image" )
+            seed( datetime.now() )
+            num_pixels = int( .01 * source_image.size[0] * source_image.size[1] )
+
+            for i in range( num_pixels ):
+                col = randint( 0, source_image.size[0] -1 )
+                row = randint( 0, source_image.size[1]  -1 )
+                random_color = ( randint( 0, 250), randint(0, 250), randint(0, 250) )
+                pixels[col, row] = random_color
+                
+        print()
+
         source_image.save( args.newfilename, exif=piexif.dump(exif_copy) )
 
         if args.summary:
