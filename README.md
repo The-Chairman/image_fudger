@@ -1,6 +1,6 @@
 usage: image_fudger.py [-h] -i IMAGEPATH -n NEWFILENAME [-o] [-g] [-d] [-l]
                        [-r] [-s]
-
+```
 Muck around with the data in an image
 
 optional arguments:
@@ -16,3 +16,4 @@ optional arguments:
   -r, --random          permute 1 percent of the pixels in this image
   -s, --summary         print a summary of the exif data of the source and the
                         manipulated copy
+```

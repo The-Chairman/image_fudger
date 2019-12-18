@@ -104,7 +104,7 @@ def main():
     ap.add_argument( '-l', '--line', action='store_true',
         help='add a random horizonta line to the image' )
     ap.add_argument( '-r', '--random', action='store_true',
-        help='permute 1% of the pixels in this image' )
+        help='permute 1 percent of the pixels in this image' )
     ap.add_argument( '-s', '--summary', action='store_true',
         help='print a summary of the exif data of the source and the manipulated copy')
 
