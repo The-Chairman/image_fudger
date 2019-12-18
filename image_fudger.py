@@ -3,11 +3,14 @@ import argparse
 import piexif
 import os.path
 import sys
+import copy
 from random import seed
 from random import randint
 from random import uniform
+from random import random
 from datetime import datetime
 from math import modf
+from datetime import timedelta
 
 def rand_orientation( current_orientation ):
     new_orientation = current_orientation
@@ -22,18 +25,17 @@ def rand_orientation( current_orientation ):
 # thanks kind stranger:
 def gen_datetime(min_year=1900, max_year=datetime.now().year):
     # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
+    seed( datetime.now() )
     start = datetime(min_year, 1, 1, 00, 00, 00)
     years = max_year - min_year + 1
     end = start + timedelta(days=365 * years)
-    return start + (end - start) * random.random()
+    return start + (end - start) * random()
 
 # YYYY:MM::DD HH:MM:SS with time shown in 24-hour format and the date and time separated by one blank
 def random_datetime( ):
-    return 0
+    return bytes( gen_datetime().strftime( "%Y:%m:%d %H:%M:%S" ), 'ascii' ) 
 
 def random_lat_long( cur_lat, cur_lat_ref, cur_long, cur_long_ref ):
-
-
     seed( datetime.now() )
 
     # random lat
@@ -45,9 +47,9 @@ def random_lat_long( cur_lat, cur_lat_ref, cur_long, cur_long_ref ):
 
     new_lat_ref = ''
     if randint(1,11) % 2 == 0:
-        new_lat_ref = 'N'
+        new_lat_ref = bytes('N', 'ascii')
     else:
-        new_lat_ref = 'S'
+        new_lat_ref = bytes('S', 'ascii')
 
     # random long
     ngps = uniform(0, 90)
@@ -58,17 +60,28 @@ def random_lat_long( cur_lat, cur_lat_ref, cur_long, cur_long_ref ):
 
     new_long_ref = ''
     if randint(1,11) % 2 == 0:
-        new_long_ref = 'E'
+        new_long_ref = bytes('E', 'ascii')
     else:
-        new_long_ref = 'W'
+        new_long_ref = bytes('W', 'ascii')
 
-
-    return (
-        ( (new_lat_degrees, 1), (new_lat_mins, 1), (new_lat_secs,1 ) ), new_lat_ref,
-        ( (new_long_degrees, 1), (new_long_mins, 1), (new_long_secs,1 ) ), new_long_ref,
-    )
+    return [
+        ( ( (int( new_lat_degrees ), 1), (int( new_lat_mins ), 1), (int( new_lat_secs ),1 ) ), 
+            new_lat_ref ),
+        ( ( (int( new_long_degrees ), 1), (int( new_long_mins ), 1), (int( new_long_secs ),1 ) ), 
+            new_long_ref ),
+    ]
     
 
+def print_exif_summary( exif_dict ):
+    print( "{:<12}: {}".format( "Orientation",exif_dict['0th'][piexif.ImageIFD.Orientation]) )
+    print( "{:<12}: {}".format( "Latitude", exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef] ) )
+    print( "{:<12}: {}".format( "Latitude", exif_dict['GPS'][piexif.GPSIFD.GPSLatitude] ) )
+    print( "{:<12}: {}".format( "Longitude", exif_dict['GPS'][piexif.GPSIFD.GPSLongitude] ) )
+    print( "{:<12}: {}".format( "Longitude Ref", exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) )
+    print( "{:<12}: {}".format( "DateTimeOriginal", 
+        exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] ) )
+    print( "{:<12}: {}".format( "DateTime", 
+        exif_dict['0th'][piexif.ImageIFD.DateTime] ) )
     
 
 def main():
@@ -85,7 +98,9 @@ def main():
     ap.add_argument( '-g', '--gps', action='store_true',
         help='randomize the exif GPS location of an image')
     ap.add_argument( '-d', '--datetime', action='store_true',
-        help='randomize the exif datetime of an image')
+        help='randomize various exif datetimes of an image')
+    ap.add_argument( '-s', '--summary', action='store_true',
+        help='print a summary of the exif data of the source and the manipulated copy')
 
     args = ap.parse_args()
 
@@ -97,32 +112,35 @@ def main():
 
     with Image.open( args.imagepath ) as source_image:
         exif_dict = piexif.load( source_image.info['exif'] )
-        exif_copy = exif_dict.copy()
+        exif_copy = copy.deepcopy( exif_dict )
         
         if args.orientation:
             new_orientation = rand_orientation(exif_dict[ '0th'][piexif.ImageIFD.Orientation])
             exif_copy['0th'][piexif.ImageIFD.Orientation] = new_orientation
-
-            print("Altering orientation: {}->{}".format( exif_dict[ '0th'][piexif.ImageIFD.Orientation],
-                 new_orientation) )
         
         if args.gps:
             print("Altering gps")
-            
-            print("{} {} {} {}".format( exif_dict['GPS'][piexif.GPSIFD.GPSLatitude], 
-                exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef],  
-                exif_dict['GPS'][piexif.GPSIFD.GPSLongitude],  
-                exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) ) 
-
-            random_lat_long(  exif_dict['GPS'][piexif.GPSIFD.GPSLatitude], 
+            new_gps = random_lat_long(  exif_dict['GPS'][piexif.GPSIFD.GPSLatitude], 
                 exif_dict['GPS'][piexif.GPSIFD.GPSLatitudeRef],  
                 exif_dict['GPS'][piexif.GPSIFD.GPSLongitude],  
                 exif_dict['GPS'][piexif.GPSIFD.GPSLongitudeRef] ) 
 
+            exif_copy['GPS'][piexif.GPSIFD.GPSLatitude] = new_gps[0][0]
+            exif_copy['GPS'][piexif.GPSIFD.GPSLatitudeRef] = new_gps[0][1]
+            exif_copy['GPS'][piexif.GPSIFD.GPSLongitude] = new_gps[1][0]
+            exif_copy['GPS'][piexif.GPSIFD.GPSLongitudeRef] = new_gps[1][1]
+
         if args.datetime:
             print("Altering datetime") 
+            exif_copy['Exif'][piexif.ExifIFD.DateTimeOriginal] = random_datetime()
+            exif_copy['0th'][piexif.ImageIFD.DateTime] = random_datetime()
         
         source_image.save( args.newfilename, exif=piexif.dump(exif_copy) )
+
+        if args.summary:
+            print_exif_summary( exif_dict )
+            print("="*40 )
+            print_exif_summary( exif_copy )
 
 if __name__ == "__main__":
     main()
